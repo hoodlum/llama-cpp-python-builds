@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+dist/
+build/
+*.whl
+*.egg-info/
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp

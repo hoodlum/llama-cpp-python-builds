@@ -1,0 +1,113 @@
+name: Build llama-cpp-python for RTX 5070 Ti (Blackwell)
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_cpp_python_version:
+        description: 'llama-cpp-python version (e.g. 0.3.7 or leave empty for latest)'
+        required: false
+        default: ''
+      cuda_version:
+        description: 'CUDA Toolkit version'
+        required: false
+        default: '12.8.0'
+
+jobs:
+  build-windows:
+    name: Build Windows Wheel (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install CUDA Toolkit ${{ github.event.inputs.cuda_version }}
+        uses: Jimver/cuda-toolkit@v0.2.21
+        id: cuda-toolkit
+        with:
+          cuda: ${{ github.event.inputs.cuda_version }}
+          method: 'network'
+          # Limiting sub-packages can speed up the build
+          sub-packages: '["nvcc", "cudart", "cublas", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel scikit-build-core cmake ninja
+
+      - name: Build Wheel
+        shell: pwsh
+        env:
+          # Blackwell CC 12.0 for RTX 5070 Ti
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120"
+          FORCE_CMAKE: "1"
+          CUDA_PATH: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
+        run: |
+          $env:PATH = "$env:CUDA_PATH\bin;$env:PATH"
+          $version = "${{ github.event.inputs.llama_cpp_python_version }}"
+          if ($version -eq "") {
+            python -m pip wheel llama-cpp-python --no-binary llama-cpp-python --wheel-dir=dist --no-deps
+          } else {
+            python -m pip wheel "llama-cpp-python==$version" --no-binary llama-cpp-python --wheel-dir=dist --no-deps
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-python-win-py${{ matrix.python-version }}-cuda${{ github.event.inputs.cuda_version }}
+          path: dist/*.whl
+
+  build-linux:
+    name: Build Linux Wheel (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install CUDA Toolkit ${{ github.event.inputs.cuda_version }}
+        uses: Jimver/cuda-toolkit@v0.2.21
+        id: cuda-toolkit
+        with:
+          cuda: ${{ github.event.inputs.cuda_version }}
+          method: 'network'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel scikit-build-core cmake ninja
+
+      - name: Build Wheel
+        env:
+          # Blackwell CC 12.0 for RTX 5070 Ti
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120"
+          FORCE_CMAKE: "1"
+        run: |
+          version="${{ github.event.inputs.llama_cpp_python_version }}"
+          if [ -z "$version" ]; then
+            python -m pip wheel llama-cpp-python --no-binary llama-cpp-python --wheel-dir=dist --no-deps
+          else
+            python -m pip wheel "llama-cpp-python==$version" --no-binary llama-cpp-python --wheel-dir=dist --no-deps
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-python-linux-py${{ matrix.python-version }}-cuda${{ github.event.inputs.cuda_version }}
+          path: dist/*.whl
