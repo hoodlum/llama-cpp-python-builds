@@ -68,7 +68,7 @@ jobs:
         env:
           # Blackwell CC 12.0 for RTX 5070 Ti
           # Use sccache as compiler launcher
-          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -Wno-dev"
           FORCE_CMAKE: "1"
         run: |
           $version = "${{ github.event.inputs.llama_cpp_python_version }}"
@@ -136,7 +136,7 @@ jobs:
       - name: Build Wheel
         env:
           # Blackwell CC 12.0 for RTX 5070 Ti
-          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -Wno-dev"
           FORCE_CMAKE: "1"
         run: |
           version="${{ github.event.inputs.llama_cpp_python_version }}"
