@@ -12,6 +12,10 @@ on:
         required: false
         default: '12.8.0'
 
+env:
+  # Enable GitHub Actions cache for sccache
+  SCCACHE_GHA_ENABLED: "true"
+
 jobs:
   build-windows:
     name: Build Windows Wheel (Python ${{ matrix.python-version }})
@@ -29,14 +33,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: Cache CUDA
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8'
+          key: ${{ runner.os }}-cuda-${{ github.event.inputs.cuda_version || '12.8.0' }}
+
       - name: Install CUDA Toolkit ${{ github.event.inputs.cuda_version }}
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
         uses: Jimver/cuda-toolkit@v0.2.21
         id: cuda-toolkit
         with:
           cuda: ${{ github.event.inputs.cuda_version }}
           method: 'network'
-          # Limiting sub-packages can speed up the build
           sub-packages: '["nvcc", "cudart", "cublas", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
+
+      - name: Set CUDA Environment
+        run: |
+          echo "CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" >> $GITHUB_ENV
+          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin" >> $GITHUB_PATH
+        shell: bash
 
       - name: Install build dependencies
         run: |
@@ -47,17 +67,19 @@ jobs:
         shell: pwsh
         env:
           # Blackwell CC 12.0 for RTX 5070 Ti
-          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120"
+          # Use sccache as compiler launcher
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
           FORCE_CMAKE: "1"
-          CUDA_PATH: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
         run: |
-          $env:PATH = "$env:CUDA_PATH\bin;$env:PATH"
           $version = "${{ github.event.inputs.llama_cpp_python_version }}"
           if ($version -eq "") {
             python -m pip wheel llama-cpp-python --no-binary llama-cpp-python --wheel-dir=dist --no-deps
           } else {
             python -m pip wheel "llama-cpp-python==$version" --no-binary llama-cpp-python --wheel-dir=dist --no-deps
           }
+
+      - name: Show sccache stats
+        run: sccache --show-stats
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -81,12 +103,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: Cache CUDA
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: '/usr/local/cuda-12.8'
+          key: ${{ runner.os }}-cuda-${{ github.event.inputs.cuda_version || '12.8.0' }}
+
       - name: Install CUDA Toolkit ${{ github.event.inputs.cuda_version }}
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
         uses: Jimver/cuda-toolkit@v0.2.21
         id: cuda-toolkit
         with:
           cuda: ${{ github.event.inputs.cuda_version }}
           method: 'network'
+
+      - name: Set CUDA Environment
+        run: |
+          echo "CUDA_PATH=/usr/local/cuda-12.8" >> $GITHUB_ENV
+          echo "/usr/local/cuda-12.8/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        shell: bash
 
       - name: Install build dependencies
         run: |
@@ -96,7 +136,7 @@ jobs:
       - name: Build Wheel
         env:
           # Blackwell CC 12.0 for RTX 5070 Ti
-          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120"
+          CMAKE_ARGS: "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
           FORCE_CMAKE: "1"
         run: |
           version="${{ github.event.inputs.llama_cpp_python_version }}"
@@ -105,6 +145,9 @@ jobs:
           else
             python -m pip wheel "llama-cpp-python==$version" --no-binary llama-cpp-python --wheel-dir=dist --no-deps
           fi
+
+      - name: Show sccache stats
+        run: sccache --show-stats
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
